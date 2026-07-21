@@ -353,7 +353,7 @@ client.once('clientReady', async () => {
 
                 {
                     name: 'دخول السيرفر 🌍',
-                    value: `\`\`\`https://discord.gg/BN6naaXJG\`\`\``,
+                    value: `\`\`\`https://discord.gg/Yt7gCPTPz\`\`\``,
                     inline: false
                 }
 
