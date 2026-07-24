@@ -425,7 +425,7 @@ client.once('clientReady', async () => {
 });
 
 // ===========================
-// تشغيل البوت
+//تشغيل البوت
 // ===========================
 
 client.login(process.env.TOKEN);
