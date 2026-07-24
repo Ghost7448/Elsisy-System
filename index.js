@@ -49,6 +49,10 @@ new SlashCommandBuilder()
 .toJSON()
 ];
 
+new SlashCommandBuilder()
+    .setName('links')
+    .setDescription('ارسال جميع روابط Elsisy Community')
+
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
 (async () => {
@@ -131,6 +135,50 @@ new ButtonBuilder()
 
 .setStyle(ButtonStyle.Secondary),
 
+);
+
+const linksEmbed = new EmbedBuilder()
+    .setColor('#ffcc00')
+    .setTitle('🔗 Elsisy Community | Official Links')
+    .setDescription(`
+# 🌐 جميع روابط Elsisy Community
+
+مرحبًا بك في الصفحة الرسمية الخاصة بروابط مجتمع **Elsisy**.
+
+يمكنك من خلال الأزرار الموجودة بالأسفل الوصول إلى جميع صفحاتنا الرسمية بكل سهولة.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+
+> 📢 تابعنا أولاً بأول لمعرفة آخر الأخبار والإعلانات والبثوث المباشرة والمحتوى الحصري.
+
+━━━━━━━━━━━━━━━━━━━━━━━
+
+**شكراً لدعمكم ❤️**
+`)
+    .setImage(banner)
+    .setFooter({
+        text: 'Elsisy Community • Official Links'
+    });
+
+const buttons = new ActionRowBuilder().addComponents(
+
+    new ButtonBuilder()
+        .setLabel('WhatsApp')
+        .setEmoji('💬')
+        .setStyle(ButtonStyle.Link)
+        .setURL('https://ضع_رابط_الواتساب'),
+
+    new ButtonBuilder()
+        .setLabel('Kick')
+        .setEmoji('🎥')
+        .setStyle(ButtonStyle.Link)
+        .setURL('https://kick.com/اسم_الحساب'),
+
+    new ButtonBuilder()
+        .setLabel('TikTok')
+        .setEmoji('🎵')
+        .setStyle(ButtonStyle.Link)
+        .setURL('https://www.tiktok.com/@اسم_الحساب')
 );
 
 return interaction.reply({
@@ -353,7 +401,7 @@ client.once('clientReady', async () => {
 
                 {
                     name: 'دخول السيرفر 🌍',
-                    value: `\`\`\`https://discord.gg/Yt7gCPTPz\`\`\``,
+                    value: `\`\`\`https://discord.gg/BN6naaXJG\`\`\``,
                     inline: false
                 }
 
