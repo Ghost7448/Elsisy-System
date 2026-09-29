@@ -36,6 +36,7 @@ const ALLOWED_ROLE_ID = "1529144144096919623";
 
 const KICK_ROLE_ID = "1529144169354891435";
 const TIKTOK_ROLE_ID = "1529144170416177172";
+const YOUTUBE_ROLE_ID = "1529144171087265997";
 
 const SERVER_ONLINE = true;
 
@@ -102,6 +103,8 @@ const embed = new EmbedBuilder()
 
 <:TikTok:1529200599298740295> **لـ مـتـابـعـة اشـعـارات الـ TikTok اضغط على زر TikTok**
 
+<:YouTube:1529200742441811998> **لـ مـتـابـعـة اشـعـارات الـ YouTube اضغط على زر YouTube**
+
 **`);
 
 
@@ -130,6 +133,16 @@ new ButtonBuilder()
 .setEmoji("<:TikTok:1521307515168624720>")
 
 .setStyle(ButtonStyle.Secondary),
+
+new ButtonBuilder()
+
+.setCustomId("youtube")
+
+.setLabel("YouTube")
+
+.setEmoji("<:YouTube:1529200742441811998>")
+
+.setStyle(ButtonStyle.Danger)
 
 );
 
