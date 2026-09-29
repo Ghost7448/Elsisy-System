@@ -167,6 +167,9 @@ roleId = KICK_ROLE_ID;
 if (interaction.customId === "tiktok")
 roleId = TIKTOK_ROLE_ID;
 
+if (interaction.customId === "youtube")
+roleId = YOUTUBE_ROLE_ID;
+
 if (!roleId) return;
 
 const member = interaction.member;
