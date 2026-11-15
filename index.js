@@ -16,7 +16,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildPresences
+        GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildVoiceStates
     ]
 });
 
@@ -31,6 +32,16 @@ const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+
+// Voice room access allowlist (Discord user IDs separated by commas in .env)
+const VOICE_ALLOWED_USER_IDS = new Set(
+    (process.env.VOICE_ALLOWED_USER_IDS || "")
+        .split(",")
+        .map(id => id.trim())
+        .filter(Boolean)
+);
+
+const VOICE_CHANNEL_ID = "1540356521043697745";
 
 const ALLOWED_ROLE_ID = "1529144144096919623";
 
@@ -196,6 +207,32 @@ ephemeral: true
 
 }
 
+});
+
+// ===========================
+// دخول عضو جديد
+// ===========================
+
+// ===========================
+// حماية روم الفويس
+// ===========================
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+    // Run only when a member joins the protected voice channel.
+    if (newState.channelId !== VOICE_CHANNEL_ID) return;
+
+    const member = newState.member;
+    if (!member) return;
+
+    // Users listed in VOICE_ALLOWED_USER_IDS are allowed to stay.
+    if (VOICE_ALLOWED_USER_IDS.has(member.id)) return;
+
+    try {
+        await member.voice.disconnect("You are not allowed in this voice channel.");
+        console.log(`Disconnected unauthorized user ${member.user.tag} (${member.id}) from protected voice channel.`);
+    } catch (err) {
+        console.error(`Failed to disconnect unauthorized user ${member.id}:`, err);
+    }
 });
 
 // ===========================
