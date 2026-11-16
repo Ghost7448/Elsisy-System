@@ -219,6 +219,25 @@ ephemeral: true
 
 // Prevent the allowlist check from interrupting a member while the bot restores them.
 const voiceRestoreInProgress = new Set();
+const voiceMoveAuditCounts = new Map();
+
+// Cache the current MemberMove counts on startup so old actions are never treated
+// as new moves after a bot restart.
+client.once("ready", async () => {
+    try {
+        const guild = await client.guilds.fetch(GUILD_ID);
+        const logs = await guild.fetchAuditLogs({ type: 26, limit: 20 });
+
+        for (const entry of logs.entries.values()) {
+            const count = Number(entry.extra?.count || 0);
+            voiceMoveAuditCounts.set(entry.id, count);
+        }
+
+        console.log("[VOICE GUARD] Initialized MemberMove audit counters.");
+    } catch (error) {
+        console.error("[VOICE GUARD] Could not initialize MemberMove audit counters:", error);
+    }
+});
 
 client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
@@ -246,42 +265,63 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     const eventTime = Date.now();
     let moveEntry = null;
 
-    // IMPORTANT: Never restore based on voiceStateUpdate alone.
-    // A self-move does not create a MemberMove audit entry.
-    // Wait briefly for Discord to publish an entry proving a moderator moved the member.
+    // Discord groups repeated MemberMove actions into one audit entry and
+    // increments extra.count. Track the count, not just the audit entry ID.
     try {
-        for (let attempt = 0; attempt < 7; attempt++) {
-            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 700));
+        for (let attempt = 0; attempt < 10; attempt++) {
+            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500));
 
             const auditLogs = await member.guild.fetchAuditLogs({
-                type: 26, // AuditLogEvent.MemberMove
-                limit: 10
+                type: 26,
+                limit: 20
             });
 
-            moveEntry = auditLogs.entries.find(entry => {
+            for (const entry of auditLogs.entries.values()) {
                 const age = Date.now() - entry.createdTimestamp;
-                const recent = age >= 0 &&
-                    age <= 8000 &&
-                    entry.createdTimestamp >= eventTime - 1500;
-
-                if (!recent || !entry.executor || entry.executor.id === client.user.id) {
-                    return false;
-                }
-
+                const recent = age >= 0 && age <= 15000;
                 const auditDestinationId =
                     entry.extra?.channel?.id ||
                     entry.extra?.channelId ||
                     entry.extra?.channel_id;
+                const executor = entry.executor;
+                const currentCount = Number(entry.extra?.count || 0);
+                const previousCount = voiceMoveAuditCounts.get(entry.id);
 
-                // Some Discord MemberMove entries expose targetId; others expose
-                // only destination channel + count. Accept either valid shape.
-                if (entry.targetId) {
-                    return entry.targetId === member.id &&
-                        (!auditDestinationId || auditDestinationId === destinationChannelId);
+                // Always refresh the cached count so an unrelated/self move
+                // cannot be mistaken for a later moderator move.
+                if (previousCount === undefined) {
+                    const createdForThisEvent = entry.createdTimestamp >= eventTime - 3000;
+                    voiceMoveAuditCounts.set(entry.id, currentCount);
+                    if (
+                        createdForThisEvent &&
+                        currentCount > 0 &&
+                        recent &&
+                        auditDestinationId === destinationChannelId &&
+                        executor &&
+                        executor.id !== client.user.id &&
+                        executor.id !== member.id
+                    ) {
+                        moveEntry = entry;
+                        break;
+                    }
+                } else if (currentCount > previousCount) {
+                    voiceMoveAuditCounts.set(entry.id, currentCount);
+
+                    if (
+                        recent &&
+                        auditDestinationId === destinationChannelId &&
+                        executor &&
+                        executor.id !== client.user.id &&
+                        executor.id !== member.id
+                    ) {
+                        moveEntry = entry;
+                        break;
+                    }
+                } else if (currentCount < previousCount) {
+                    // Discord may return a refreshed/compacted audit entry set.
+                    voiceMoveAuditCounts.set(entry.id, currentCount);
                 }
-
-                return auditDestinationId === destinationChannelId;
-            });
+            }
 
             if (moveEntry) break;
         }
@@ -290,16 +330,14 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         return;
     }
 
-    // No matching moderator move: assume the member changed rooms themselves.
     if (!moveEntry) {
-        console.log("[VOICE GUARD] No matching moderator MemberMove entry. Leaving " +
+        console.log("[VOICE GUARD] No new matching moderator MemberMove count. Leaving " +
             member.user.tag + " in destination channel " + destinationChannelId + ".");
         return;
     }
 
     const actor = moveEntry.executor;
 
-    // The audit entry confirms another user performed the move. Restore now.
     voiceRestoreInProgress.add(member.id);
     try {
         await member.voice.setChannel(
@@ -328,7 +366,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         .setTitle("🔔 تنبيه بخصوص روم الفويس")
         .setDescription("تمت محاولة سحبك من روم <#" + VOICE_CHANNEL_ID + ">.")
         .addFields(
-            { name: "بواسطة", value: "<@" + actor.id + ">\nUser: " + (actor.tag || actor.username) + "\nID: \`" + actor.id + "\`", inline: false },
+            { name: "بواسطة", value: "<@" + actor.id + ">\nUser: " + (actor.tag || actor.username) + "\nID: \x60" + actor.id + "\x60", inline: false },
             { name: "الروم", value: "<#" + VOICE_CHANNEL_ID + ">", inline: false }
         )
         .setTimestamp();
