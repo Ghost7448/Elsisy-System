@@ -217,12 +217,22 @@ ephemeral: true
 // حماية روم الفويس
 // ===========================
 
+// Prevent the allowlist check from interrupting a member while the bot restores them.
+const voiceRestoreInProgress = new Set();
+
 client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
     if (!member) return;
 
-    // Allow only users listed in the ENV to enter the protected room.
+    console.log("[VOICE GUARD] State update:", {
+        userId: member.id,
+        oldChannelId: oldState.channelId,
+        newChannelId: newState.channelId
+    });
+
+    // Allowlisted members can enter the protected room normally.
     if (newState.channelId === VOICE_CHANNEL_ID) {
+        if (voiceRestoreInProgress.has(member.id)) return;
         if (VOICE_ALLOWED_USER_IDS.has(member.id)) return;
 
         try {
@@ -234,37 +244,56 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         return;
     }
 
-    // Only process a move from the protected room to another voice room.
+    // Any channel-to-channel move out of the protected room is blocked.
+    // Do not depend on Audit Logs to restore the member.
     if (oldState.channelId !== VOICE_CHANNEL_ID || !newState.channelId) return;
+    if (voiceRestoreInProgress.has(member.id)) return;
 
+    const movedToChannelId = newState.channelId;
     const eventReceivedAt = Date.now();
+    voiceRestoreInProgress.add(member.id);
 
     try {
-        // MemberMove audit entries may have a null targetId; destination is in extra.channel.
+        await member.voice.setChannel(
+            VOICE_CHANNEL_ID,
+            "Prevent moving a member out of the protected voice channel"
+        );
+        console.log("[VOICE GUARD] Successfully restored " + member.user.tag + " (" + member.id + ") to protected room.");
+    } catch (restoreError) {
+        console.error("[VOICE GUARD] FAILED to restore " + member.user.tag + " (" + member.id + "). " +
+            "The bot needs Move Members permission and access to the voice channels.", restoreError);
+        voiceRestoreInProgress.delete(member.id);
+        return;
+    }
+
+    // Keep the bypass briefly so the restore event is not rejected by the allowlist check.
+    setTimeout(() => voiceRestoreInProgress.delete(member.id), 5000);
+
+    // Identify who performed the move. This is only for notifications;
+    // restoration above already happened even if Audit Logs are unavailable.
+    try {
         let moveEntry = null;
 
         for (let attempt = 0; attempt < 5; attempt++) {
-            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 600));
+            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 700));
 
             const auditLogs = await member.guild.fetchAuditLogs({
-                type: 26, // MemberMove
-                limit: 10
+                type: 26, // AuditLogEvent.MemberMove
+                limit: 15
             });
 
             moveEntry = auditLogs.entries.find(entry => {
                 const age = Date.now() - entry.createdTimestamp;
-                const recent = age >= 0 && age <= 10000 &&
-                    entry.createdTimestamp >= eventReceivedAt - 2000;
+                const recent = age >= 0 && age <= 12000 &&
+                    entry.createdTimestamp >= eventReceivedAt - 3000;
                 const destinationId = entry.extra?.channel?.id || entry.extra?.channelId;
-                const sameMember = entry.targetId === member.id;
-                const matchingMove = sameMember ||
-                    (!entry.targetId && destinationId === newState.channelId);
 
                 return Boolean(
                     entry.executor &&
                     entry.executor.id !== client.user.id &&
+                    entry.targetId === member.id &&
                     recent &&
-                    matchingMove
+                    (!destinationId || destinationId === movedToChannelId)
                 );
             });
 
@@ -272,26 +301,19 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         }
 
         if (!moveEntry) {
-            console.log("[VOICE GUARD] No matching MemberMove audit entry for " +
-                member.user.tag + " (" + member.id + "), destination " + newState.channelId +
-                ". Check the bot's View Audit Log permission and audit-log entry.");
+            console.warn("[VOICE GUARD] Member was restored, but the mover could not be identified. " +
+                "Check View Audit Log permission. Member: " + member.id);
             return;
         }
 
         const actor = moveEntry.executor;
-
-        // Restore first; DM failures must not prevent the restore.
-        await member.voice.setChannel(
-            VOICE_CHANNEL_ID,
-            "Restore member moved out of the protected voice channel"
-        );
 
         const warningEmbed = new EmbedBuilder()
             .setColor("#ff0000")
             .setTitle("⚠️ تحذير: ممنوع سحب الأعضاء")
             .setDescription("محاولة سحب عضو من روم <#" + VOICE_CHANNEL_ID + "> غير مسموح بها. من فضلك لا تكرر هذا التصرف.")
             .addFields(
-                { name: "العضو", value: "<@" + member.id + ">\nUser: " + member.user.tag + "\nID: " + member.id, inline: false },
+                { name: "العضو", value: "<@" + member.id + ">\nUser: " + member.user.tag + "\nID: \`" + member.id + "\`", inline: false },
                 { name: "الروم", value: "<#" + VOICE_CHANNEL_ID + ">", inline: true }
             )
             .setTimestamp();
@@ -301,7 +323,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
             .setTitle("🔔 تنبيه بخصوص روم الفويس")
             .setDescription("تمت محاولة سحبك من روم <#" + VOICE_CHANNEL_ID + "> بواسطة <@" + actor.id + ">.")
             .addFields(
-                { name: "بواسطة", value: "<@" + actor.id + ">\nUser: " + (actor.tag || actor.username) + "\nID: " + actor.id, inline: false },
+                { name: "بواسطة", value: "<@" + actor.id + ">\nUser: " + (actor.tag || actor.username) + "\nID: \`" + actor.id + "\`", inline: false },
                 { name: "الروم", value: "<#" + VOICE_CHANNEL_ID + ">", inline: false }
             )
             .setTimestamp();
@@ -318,13 +340,11 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
             console.warn("[VOICE GUARD] Could not DM notice to " + member.id + ":", dmError.message);
         }
 
-        console.log("[VOICE GUARD] Restored " + member.user.tag + " (" + member.id +
-            ") after move by " + (actor.tag || actor.username) + " (" + actor.id + ").");
-    } catch (err) {
-        console.error("[VOICE GUARD] Failed to handle protected voice move for " + member.id + ":", err);
+        console.log("[VOICE GUARD] Notified mover " + actor.id + " and affected member " + member.id + ".");
+    } catch (auditError) {
+        console.error("[VOICE GUARD] Member was restored, but Audit Log lookup failed:", auditError);
     }
 });
-
 // ===========================
 // دخول عضو جديد
 // ===========================
