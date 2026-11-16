@@ -226,7 +226,7 @@ const voiceMoveAuditCounts = new Map();
 client.once("ready", async () => {
     try {
         const guild = await client.guilds.fetch(GUILD_ID);
-        const logs = await guild.fetchAuditLogs({ type: 26, limit: 20 });
+        const logs = await guild.fetchAuditLogs({ type: 26, limit: 100 });
 
         for (const entry of logs.entries.values()) {
             const count = Number(entry.extra?.count || 0);
@@ -268,12 +268,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     // Discord groups repeated MemberMove actions into one audit entry and
     // increments extra.count. Track the count, not just the audit entry ID.
     try {
-        for (let attempt = 0; attempt < 10; attempt++) {
-            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 500));
+        for (let attempt = 0; attempt < 15; attempt++) {
+            if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 600));
 
             const auditLogs = await member.guild.fetchAuditLogs({
                 type: 26,
-                limit: 20
+                limit: 100
             });
 
             for (const entry of auditLogs.entries.values()) {
@@ -305,10 +305,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
                         break;
                     }
                 } else if (currentCount > previousCount) {
+                    // An existing grouped audit entry may be much older than the
+                    // latest action. A count increase is the new action signal;
+                    // do not reject it based on the entry's original timestamp.
                     voiceMoveAuditCounts.set(entry.id, currentCount);
 
                     if (
-                        recent &&
                         auditDestinationId === destinationChannelId &&
                         executor &&
                         executor.id !== client.user.id &&
