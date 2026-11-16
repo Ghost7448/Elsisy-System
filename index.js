@@ -321,16 +321,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
         .setColor("#ff0000")
         .setTitle("⚠️ تحذير: ممنوع سحب الأعضاء")
         .setDescription("محاولة سحب عضو من روم <#" + VOICE_CHANNEL_ID + "> غير مسموح بها. من فضلك لا تكرر هذا التصرف.")
-        .addFields(
-            { name: "العضو", value: "<@" + member.id + ">\nUser: " + member.user.tag + "\nID: \`" + member.id + "\`", inline: false },
-            { name: "الروم", value: "<#" + VOICE_CHANNEL_ID + ">", inline: true }
-        )
         .setTimestamp();
 
     const memberNoticeEmbed = new EmbedBuilder()
         .setColor("#ff0000")
         .setTitle("🔔 تنبيه بخصوص روم الفويس")
-        .setDescription("تمت محاولة سحبك من روم <#" + VOICE_CHANNEL_ID + "> بواسطة <@" + actor.id + ">.")
+        .setDescription("تمت محاولة سحبك من روم <#" + VOICE_CHANNEL_ID + ">.")
         .addFields(
             { name: "بواسطة", value: "<@" + actor.id + ">\nUser: " + (actor.tag || actor.username) + "\nID: \`" + actor.id + "\`", inline: false },
             { name: "الروم", value: "<#" + VOICE_CHANNEL_ID + ">", inline: false }
