@@ -323,7 +323,7 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     } catch (err) {
         console.error("[VOICE GUARD] Failed to handle protected voice move for " + member.id + ":", err);
     }
-});;
+});
 
 // ===========================
 // دخول عضو جديد
