@@ -43,6 +43,9 @@ const VOICE_ALLOWED_USER_IDS = new Set(
 
 const VOICE_CHANNEL_ID = "1540356521043697745";
 
+// This user may move members out of the protected room without restrictions.
+const VOICE_MOVE_EXEMPT_USER_ID = "414139047309475851";
+
 const ALLOWED_ROLE_ID = "1529144144096919623";
 
 const KICK_ROLE_ID = "1529144169354891435";
@@ -339,6 +342,12 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     }
 
     const actor = moveEntry.executor;
+
+    // Exempt this mover: allow the move and skip all restoration/DM warnings.
+    if (actor.id === VOICE_MOVE_EXEMPT_USER_ID) {
+        console.log("[VOICE GUARD] Exempt mover " + actor.id + " moved " + member.user.tag + "; allowing the move without warnings.");
+        return;
+    }
 
     voiceRestoreInProgress.add(member.id);
     try {
