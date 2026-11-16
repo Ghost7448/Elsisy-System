@@ -218,6 +218,8 @@ ephemeral: true
 // ===========================
 
 // Prevent the allowlist check from interrupting a member while the bot restores them.
+const voiceRestoreInProgress = new Set();
+
 client.on("voiceStateUpdate", async (oldState, newState) => {
     const member = newState.member || oldState.member;
     if (!member) return;
